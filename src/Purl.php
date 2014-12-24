@@ -159,12 +159,12 @@ class Purl
      * @return type
      */
     public function getInfo($opt = 0)
-    {        
+    {
         if ($opt === 0) {
             
             return $this->_info;
             
-        } 
+        }
         
         if (isset(self::$_infoMap[$opt])) {
             return $this->_info[self::$_infoMap[$opt]];
@@ -172,7 +172,7 @@ class Purl
         
         trigger_error(__FUNCTION__ . PURL_NOT_SUPPORTED_MSG, PURL_ERROR_TYPE);
     }
-    
+
     /**
      * 
      * 
@@ -183,40 +183,45 @@ class Purl
     {        
         return $this->_logs;
     }
-    
+
     /**
      * Execute "curl" call
      * 
      * @return type
      */
     public function execute()
-    {     
+    {
         $headers = $query = '';
-        
-        if (!empty($this->_params)) {            
+
+        if(!empty($this->_params)) {            
             if (is_array($this->_params)) {
                 $query = http_build_query($this->_params, null, '&');
             } else {
                 $query = $this->_params;
             }
         }
-        
-        // add cookie header
-        if (isset($this->_options[CURLOPT_COOKIE])) {
-            $this->_headers['Cookie'] = $this->_options[CURLOPT_COOKIE];            
+
+        // Support basic authentication
+        if (isset($this->_options[CURLOPT_USERPWD])) {
+            $this->_headers[] = 'Authorization: Basic ' . base64_encode($this->_options[CURLOPT_USERPWD]);
         }
-                
-        if ($this->_headers) {
-            foreach ($this->_headers as $name => $value) {
-                $headers .= $name . ': ' . $value . "\r\n";
+
+        // add cookie header
+        if(isset($this->_options[CURLOPT_COOKIE])) {
+            $this->_headers[] = 'Cookie: ' . $this->_options[CURLOPT_COOKIE];
+        }
+
+        if($this->_headers) {
+            foreach($this->_headers as $value) {
+                $headers .= $value . "\r\n";
             }
         }
-        
-        if (!isset($this->_headers['Content-type'])) $headers .= "Content-type: " . "application/x-www-form-urlencoded"."\r\n";
-        
+
+        if(!preg_match('/Content-type/', $headers)) $headers .= "Content-type: " . "application/x-www-form-urlencoded"."\r\n";
+
         return $this->_call($query, $this->_info['request_header'] = $headers);
     }
-    
+
     /**
      * Make request using file_get_contents.
      * Trying to set as much curl original settings as possible
@@ -233,10 +238,10 @@ class Purl
                 'method' => $this->_method,
                 'header' => $headers,
                 'ignore_errors' => true,
-                'user_agent' => $this->_agent,
+                'user_agent' => $this->_agent
               )
             );
-                
+
         // HTTP context settings
         if (isset($this->_options[CURLOPT_TIMEOUT])) $options['http']['timeout'] = $this->_options[CURLOPT_TIMEOUT];
         
@@ -252,7 +257,7 @@ class Purl
         // SSL context settings
         if (isset($this->_options[CURLOPT_SSL_VERIFYPEER])) $options['ssl']['verify_peer'] = $this->_options[CURLOPT_SSL_VERIFYPEER];
         if (isset($this->_options[CURLOPT_CAINFO])) $options['ssl']['cafile'] = $this->_options[CURLOPT_CAINFO];
-        
+
         if ($this->_method === 'POST') {
             $options['http']['content'] = $query;
         } elseif (!empty($query)) {
@@ -261,23 +266,26 @@ class Purl
         
         $context = stream_context_create($options);
         
+
         stream_context_set_params($context, array('notification' => function() {
             // not working yet :/
             $this->_logs[] = func_get_args();
         }));
-        
+
         $reporting = error_reporting(0);
-        
+
         if (!empty($this->_options[CURLOPT_NOBODY])) {
             $handler = fopen($this->_url, 'r', false, $context);
         } else {
             $this->_result = file_get_contents($this->_url, false, $context);
         }
-        
-        $this->_info['http_code'] = explode(' ', $http_response_header[0])[1];
-                
+
+        $httpCode = explode(' ', $http_response_header[0])[1];
+
+        $this->_info['http_code'] = (int) $httpCode;
+
         error_reporting($reporting);
-                
+
         // on failure
         if ($this->_result === false || (isset($handler) && $handler === false)) {
             
@@ -289,7 +297,7 @@ class Purl
         if (!empty($this->_options[CURLOPT_HEADER])) {
             $this->_result = implode($http_response_header, "\r\n") . "\r\n\r\n" . $this->_result;
         }
-                        
+
         return isset($this->_options[CURLOPT_RETURNTRANSFER]) ? $this->_result : true;
     }
     
